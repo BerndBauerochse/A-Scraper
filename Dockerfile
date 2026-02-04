@@ -10,4 +10,6 @@ COPY . .
 # Ensure data dictionary exists for SQLite
 RUN mkdir -p /app/data
 
+EXPOSE 5005
+
 CMD ["python", "main.py"]
