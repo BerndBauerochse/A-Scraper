@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Audible Scraper</title>
+    <style>
+        body {
+            background: url('/assets/bg.jpg') no-repeat center center fixed;
+            background-size: cover;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', sans-serif;
+            color: white;
+        }
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: -1;
+        }
+        .login-card {
+            background: rgba(30, 30, 30, 0.75);
+            backdrop-filter: blur(15px);
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            text-align: center;
+            width: 300px;
+        }
+        h2 { margin-top: 0; font-weight: 300; margin-bottom: 20px; }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.3);
+            color: white;
+            box-sizing: border-box;
+            outline: none;
+        }
+        input:focus { border-color: #0078d7; }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #0078d7;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover { background: #1084e3; }
+        .error { color: #ff4d4d; margin-bottom: 15px; font-size: 14px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h2>Audible Scraper</h2>
+        <div id="errorMsg" class="error">Falsches Passwort</div>
+        <form onsubmit="doLogin(event)">
+            <input type="password" id="password" placeholder="Passwort" required autofocus>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+
+    <script>
+        async function doLogin(e) {
+            e.preventDefault();
+            const pw = document.getElementById('password').value;
+            
+            try {
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: pw})
+                });
+                
+                if (res.ok) {
+                    window.location.href = "/";
+                } else {
+                    document.getElementById('errorMsg').style.display = 'block';
+                }
+            } catch(err) {
+                alert("Login Error: " + err);
+            }
+        }
+    </script>
+</body>
+</html>

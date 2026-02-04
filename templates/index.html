@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Audible Scraper Web</title>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --card-bg: rgba(30, 30, 30, 0.90); 
+            --primary: #0078d7;
+            --text: #ffffff;
+            --border: rgba(255,255,255,0.15);
+        }
+
+        /* 1. Global & Scrollbar Hiding */
+        body {
+            background: url('/assets/bg.jpg') no-repeat center center fixed;
+            background-size: cover;
+            color: var(--text);
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0; padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex; flex-direction: column;
+            backdrop-filter: blur(5px);
+            overflow: hidden;
+        }
+        
+        * { scrollbar-width: none; }
+        *::-webkit-scrollbar { display: none; }
+
+        body::before {
+            content: ""; position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6); z-index: -1;
+        }
+
+        /* 2. Toolbar - MATCHING SCREENSHOT */
+        .toolbar {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px 15px; 
+            margin-bottom: 20px;
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; /* push Left / Center / Right apart */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            flex-shrink: 0;
+        }
+
+        /* Groupings */
+        .toolbar-left, .toolbar-center, .toolbar-right {
+            display: flex; align-items: center; gap: 8px;
+        }
+        .toolbar-center { flex-grow: 1; justify-content: center; }
+
+        /* Buttons */
+        button {
+            background-color: #3a3a3a; /* Default Dark Grey like screenshot */
+            color: #ddd; 
+            border: 1px solid #555;
+            padding: 8px 16px; 
+            border-radius: 4px; 
+            font-weight: 600; 
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        button:hover { background-color: #4a4a4a; color: white; }
+        
+        button.primary { background-color: var(--primary); border-color: var(--primary); color: white; }
+        button.primary:hover { background-color: #0063b1; }
+        
+        button.success { background-color: #28a745; border-color: #28a745; color: white; }
+        button.success:hover { background-color: #218838; }
+
+        /* Only Updates Toggle Button */
+        button.toggle-btn {
+            background-color: #3a3a3a;
+            color: #aaa;
+            display: flex; align-items: center; gap: 6px;
+        }
+        button.toggle-btn.active {
+            background-color: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .toggle-icon {
+            width: 12px; height: 12px; border: 2px solid currentColor; border-radius: 2px;
+        }
+        button.toggle-btn.active .toggle-icon {
+            background: currentColor;
+        }
+
+        /* Search Input - RECTANGULAR & DARK (Screenshot style) */
+        input[type="text"] {
+            padding: 8px 12px;
+            border-radius: 4px; /* Rectangular */
+            border: 1px solid #444;
+            background-color: #222;
+            color: white;
+            min-width: 350px;
+            font-size: 13px;
+            outline: none;
+        }
+        input[type="text"]:focus { border-color: #666; background-color: #2a2a2a; }
+
+        /* 3. Status Bar */
+        .status-bar {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 15px; 
+            margin-bottom: 10px;
+            border-left: 4px solid var(--primary); /* Blue indicator left */
+            display: flex; justify-content: space-between; 
+            font-family: 'Consolas', monospace; font-size: 12px; color: #ccc;
+            flex-shrink: 0;
+        }
+
+        /* 4. Table */
+        .table-container {
+            flex-grow: 1;
+            overflow-y: scroll;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        table { width: 100%; border-collapse: collapse; min-width: 1200px; font-size: 13px; }
+        
+        th { 
+            background: #2a2a2a; color: #eee; padding: 12px 10px; text-align: left; font-weight: 600;
+            position: sticky; top: 0; z-index: 10; cursor: pointer; user-select: none;
+            border-bottom: 2px solid #444;
+        }
+        th:hover { background: #333; }
+
+        td { 
+            padding: 8px 10px; border-bottom: 1px solid #3a3a3a; 
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+        }
+        tr:hover td { background: #333; }
+
+        /* Badges */
+        .badge-new { background: #ff4d4d; color: white; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold; }
+        .badge-mod { background: #4d94ff; color: white; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold; }
+        .badge-todo { background: #444; color: #aaa; padding: 2px 5px; border-radius: 3px; font-size: 10px; }
+
+        a { color: #5dade2; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* Logs Table Styles */
+        #logsTable td { white-space: normal; line-height: 1.4; color: #ccc; max-width: none; }
+    </style>
+</head>
+<body>
+
+    <div style="display:flex; justify-content:space-between; margin-bottom:15px; flex-shrink:0;">
+        <h1 style="margin:0; font-weight:300; font-size: 26px;">Audible Scraper</h1>
+        <div style="font-size:12px; opacity:0.6;">v2.5 (Design Restore)</div>
+    </div>
+
+    <!-- Toolbar: Flex-spaced Groups -->
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <button id="scrapeBtn" class="primary" onclick="doAction('/api/scrape')">Scrape Now</button>
+            <button id="n8nBtn" onclick="doAction('/api/update_n8n')">Update via n8n</button>
+            <button onclick="loadData()">Refresh</button>
+        </div>
+
+        <div class="toolbar-center">
+            <input type="text" id="searchInput" placeholder="Search..." onkeyup="renderTable()">
+            <!-- Styled Toggle Button -->
+            <button id="onlyUpdatesBtn" class="toggle-btn" onclick="toggleOnlyUpdates()">
+                <div class="toggle-icon"></div> Only Updates
+            </button>
+        </div>
+
+        <div class="toolbar-right">
+            <button class="success" onclick="location.href='/api/export'">Export CSV</button>
+            <button id="logsBtn" onclick="toggleLogs()">Logs</button>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <span id="statusText">Ready</span>
+        <span id="countText">0 entries</span>
+    </div>
+
+    <!-- Content -->
+    <div class="table-container">
+        
+        <!-- MAIN TABLE -->
+        <table id="mainTable">
+            <thead>
+                <tr>
+                    <th onclick="setSort(0)">Status</th>
+                    <th onclick="setSort(1)">Title</th>
+                    <th onclick="setSort(2)">Subtitle</th>
+                    <th onclick="setSort(3)">Author</th>
+                    <th onclick="setSort(4)">Rating</th>
+                    <th onclick="setSort(5)">Count</th>
+                    <th onclick="setSort(6)">Rel. Date</th>
+                    <th onclick="setSort(7)">Runtime</th>
+                    <th onclick="setSort(8)">RT €</th>
+                    <th onclick="setSort(9)">Calc €</th>
+                    <th onclick="setSort(10)">Aud. €</th>
+                    <th onclick="setSort(11)">EAN</th>
+                    <th>Link</th>
+                </tr>
+            </thead>
+            <tbody id="mainBody"></tbody>
+        </table>
+
+        <!-- LOGS TABLE -->
+        <table id="logsTable" style="display:none;">
+            <thead>
+                <tr>
+                    <th style="width:80px;">Type</th>
+                    <th style="width:300px;">Title</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody id="logsBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        let allEntries = [];
+        let sortCol = 6; // Rel Date
+        let sortAsc = false;
+        let viewMode = 'main';
+        let onlyUpdates = false;
+
+        loadData();
+        setInterval(checkStatus, 3000);
+
+        async function loadData() {
+            setStatus("Loading...");
+            try {
+                const res = await fetch('/api/entries');
+                const text = await res.text();
+                
+                if (text.includes("<!DOCTYPE")) { window.location.href = "/login"; return; }
+                
+                allEntries = JSON.parse(text);
+                
+                doSort();
+                renderTable();
+                setCount(allEntries.length + " entries loaded.");
+                setStatus("Loaded.");
+            } catch(e) {
+                console.error(e);
+                setStatus("Error: " + e);
+            }
+        }
+
+        // --- Logic ---
+        function toggleOnlyUpdates() {
+            onlyUpdates = !onlyUpdates;
+            const btn = document.getElementById('onlyUpdatesBtn');
+            if(onlyUpdates) btn.classList.add('active');
+            else btn.classList.remove('active');
+            renderTable();
+        }
+
+        // --- Sorting ---
+        function setSort(col) {
+            if(sortCol === col) sortAsc = !sortAsc;
+            else { sortCol = col; sortAsc = true; }
+            if(sortCol === 6 && col !== sortCol) sortAsc = false; 
+            doSort();
+            renderTable();
+        }
+
+        function doSort() {
+            allEntries.sort((a, b) => {
+                let vA = val(a, sortCol);
+                let vB = val(b, sortCol);
+                
+                if([5,7,8,9,10].includes(sortCol)) { vA = parseFloat(vA)||0; vB = parseFloat(vB)||0; }
+                if(sortCol === 6) { vA = dateVal(vA); vB = dateVal(vB); }
+                
+                if (vA < vB) return sortAsc ? -1 : 1;
+                if (vA > vB) return sortAsc ? 1 : -1;
+                return 0;
+            });
+        }
+        
+        function val(e, c) {
+            switch(c) {
+                case 0: return e.is_new ? 2 : (e.is_changed ? 1 : 0);
+                case 1: return e.title || "";
+                case 2: return e.subtitle || "";
+                case 3: return e.author || "";
+                case 4: return e.rating || "";
+                case 5: return e.rating_count || 0;
+                case 6: return e.release_date || "";
+                case 7: return e.runtime || 0;
+                case 8: return e.runtime_price || "";
+                case 9: return e.calculated_price || "";
+                case 10: return e.price_without_sub || "";
+                case 11: return e.ean || e.ean_digital || "";
+                default: return "";
+            }
+        }
+        function dateVal(s) {
+            if(!s) return 0;
+            const p = s.split('.');
+            if(p.length!=3) return 0;
+            return new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime();
+        }
+
+        // --- Rendering ---
+        function renderTable() {
+            if(viewMode === 'logs') return;
+
+            const tbody = document.getElementById('mainBody');
+            const filter = document.getElementById('searchInput').value.toLowerCase();
+            
+            let html = "";
+            let visible = 0;
+
+            for(const e of allEntries) {
+                if(onlyUpdates && !e.is_new && !e.is_changed) continue;
+                
+                const txt = (e.title+" "+e.author+" "+e.ean).toLowerCase();
+                if(filter && !txt.includes(filter)) continue;
+
+                visible++;
+                if(!filter && !onlyUpdates && visible > 500) continue;
+
+                let badges = "";
+                if(e.is_new) badges += '<span class="badge-new">NEW</span> ';
+                if(e.is_changed) badges += '<span class="badge-mod">MOD</span> ';
+                
+                html += `<tr>
+                    <td>${badges}</td>
+                    <td title="${e.title}"><a href="${e.url}" target="_blank">${e.title}</a></td>
+                    <td>${e.subtitle || ""}</td>
+                    <td>${e.author || ""}</td>
+                    <td>${e.rating || ""}</td>
+                    <td>${e.rating_count || 0}</td>
+                    <td>${e.release_date || ""}</td>
+                    <td>${e.runtime || ""}</td>
+                    <td>${e.runtime_price || ""}</td>
+                    <td>${e.calculated_price || ""}</td>
+                    <td>${e.price_without_sub || ""}</td>
+                    <td>${e.ean || e.ean_digital || ""}</td>
+                    <td><button style="padding:4px 8px; font-size:10px; background:#444;" onclick="navigator.clipboard.writeText('${e.url}')">Copy</button></td>
+                </tr>`;
+            }
+            tbody.innerHTML = html;
+            setCount(visible + " entries");
+        }
+
+        async function toggleLogs() {
+            const main = document.getElementById('mainTable');
+            const logs = document.getElementById('logsTable');
+            const btn = document.getElementById('logsBtn');
+
+            if (viewMode === 'main') {
+                viewMode = 'logs';
+                main.style.display = 'none';
+                logs.style.display = 'table';
+                btn.innerText = "Back to Table";
+                btn.classList.add("primary");
+                
+                const tb = document.getElementById('logsBody');
+                tb.innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+                const r = await fetch('/api/logs');
+                const data = await r.json();
+                
+                let html = "";
+                for(const l of data) {
+                    const p = l.split('|');
+                    if(p.length < 3) continue;
+                    let type=p[1].trim(), ti=p[2].trim().replace(/\(.*\)$/,''), det=p.slice(3).join(' ');
+                    let b = type;
+                    if(type=='NEW') b='<span class="badge-new">NEW</span>';
+                    if(type=='MOD') b='<span class="badge-mod">MOD</span>';
+                    html += `<tr><td>${b}</td><td>${ti}</td><td>${det}</td></tr>`;
+                }
+                tb.innerHTML = html || '<tr><td colspan="3">No Logs.</td></tr>';
+            } else {
+                viewMode = 'main';
+                main.style.display = 'table';
+                logs.style.display = 'none';
+                btn.innerText = "Logs";
+                btn.classList.remove("primary");
+                renderTable();
+            }
+        }
+
+        async function doAction(url) {
+            if(!confirm("Start?")) return;
+            try {
+                const r = await fetch(url, {method:'POST'});
+                const j = await r.json();
+                if(j.status=='error') alert(j.message);
+                checkStatus();
+            } catch(e) { alert(e); }
+        }
+
+        async function checkStatus() {
+            try {
+                const r = await fetch('/api/status');
+                const d = await r.json();
+                if(d.is_running) {
+                    setStatus("Running: " + d.last_message, true);
+                    document.getElementById('scrapeBtn').disabled = true;
+                    document.getElementById('n8nBtn').disabled = true;
+                } else {
+                    document.getElementById('scrapeBtn').disabled = false;
+                    document.getElementById('n8nBtn').disabled = false;
+                    if(document.getElementById('statusText').innerText.includes("Running")) {
+                        setStatus("Done.");
+                        loadData();
+                    }
+                }
+            } catch(e) {}
+        }
+
+        function setStatus(t, a=false) { 
+            const el = document.getElementById('statusText');
+            el.innerText = t; 
+            el.style.color = a ? '#0078d7' : '#ccc';
+            if(a) el.style.borderLeftColor = 'orange'; else el.style.borderLeftColor = 'var(--primary)';
+        }
+        function setCount(t) { document.getElementById('countText').innerText = t; }
+
+    </script>
+</body>
+</html>

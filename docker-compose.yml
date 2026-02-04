@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  scraper:
+    build: .
+    image: audible-scraper-web
+    container_name: audible-scraper
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "5005:5005"
+    restart: unless-stopped
