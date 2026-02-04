@@ -13,7 +13,7 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
 class UpdateManager:
-    N8N_WEBHOOK_URL = "https://n8n.der-audio-verlag.de/webhook/389acb40-3902-4f50-a3e8-e99f77a7b7ff"
+    N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "https://n8n.der-audio-verlag.de/webhook/389acb40-3902-4f50-a3e8-e99f77a7b7ff")
 
     def __init__(self, entries_map: Dict, save_callback: Callable):
         self.entries_map = entries_map
