@@ -155,7 +155,7 @@ def run_full_cycle():
                     diffs = []
                     if existing.release_date != entry.release_date: diffs.append(f"Release: {existing.release_date}->{entry.release_date}")
                     if existing.price_without_sub != entry.price_without_sub: diffs.append(f"Price: {existing.price_without_sub}->{entry.price_without_sub}")
-                    if existing.title != entry.title: diffs.append(f"Title updated")
+                    if existing.title != entry.title: diffs.append(f"Title: {existing.title} -> {entry.title}")
                     
                     # Merge fields
                     existing.price_without_sub = entry.price_without_sub
@@ -164,10 +164,11 @@ def run_full_cycle():
                     existing.rating = entry.rating
                     existing.rating_count = entry.rating_count
                     if entry.subtitle: existing.subtitle = entry.subtitle
+                    if entry.title: existing.title = entry.title
                     
                     if diffs:
                          existing.is_changed = True
-                         log_entry = f"{current_time} | MOD | {entry.title} ({entry.id}) | {', '.join(diffs)}"
+                         log_entry = f"{current_time} | MOD | {entry.title} ({entry.id}) | {'; '.join(diffs)}"
                          changes_log.append(log_entry)
             
             save_entries(entries_map)

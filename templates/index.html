@@ -219,9 +219,11 @@
         <table id="logsTable" style="display:none;">
             <thead>
                 <tr>
-                    <th style="width:80px;">Type</th>
-                    <th style="width:300px;">Title</th>
-                    <th>Details</th>
+                    <th style="width:170px;" onclick="setLogSort(0)">Date</th>
+                    <th style="width:80px;" onclick="setLogSort(1)">Type</th>
+                    <th style="width:300px;" onclick="setLogSort(2)">Title</th>
+                    <th onclick="setLogSort(3)">Title Change</th>
+                    <th onclick="setLogSort(4)">Details</th>
                 </tr>
             </thead>
             <tbody id="logsBody"></tbody>
@@ -234,6 +236,9 @@
         let sortAsc = false;
         let viewMode = 'main';
         let onlyUpdates = false;
+        let logEntries = [];
+        let logSortCol = 0;
+        let logSortAsc = false;
 
         loadData();
         setInterval(checkStatus, 3000);
@@ -370,21 +375,41 @@
                 btn.classList.add("primary");
                 
                 const tb = document.getElementById('logsBody');
-                tb.innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+                tb.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
                 const r = await fetch('/api/logs');
                 const data = await r.json();
                 
-                let html = "";
-                for(const l of data) {
-                    const p = l.split('|');
-                    if(p.length < 3) continue;
-                    let type=p[1].trim(), ti=p[2].trim().replace(/\(.*\)$/,''), det=p.slice(3).join(' ');
-                    let b = type;
-                    if(type=='NEW') b='<span class="badge-new">NEW</span>';
-                    if(type=='MOD') b='<span class="badge-mod">MOD</span>';
-                    html += `<tr><td>${b}</td><td>${ti}</td><td>${det}</td></tr>`;
-                }
-                tb.innerHTML = html || '<tr><td colspan="3">No Logs.</td></tr>';
+                logEntries = data.map((line) => {
+                    const parts = line.split('|');
+                    if (parts.length < 3) return null;
+                    const rawTitle = parts[2].trim();
+                    const titleMatch = rawTitle.match(/^(.*)\\s*\\(([^)]+)\\)$/);
+                    const title = titleMatch ? titleMatch[1].trim() : rawTitle;
+                    const id = titleMatch ? titleMatch[2].trim() : "";
+                    const rawDetails = parts.slice(3).join('|').trim();
+                    const detailParts = rawDetails
+                        ? rawDetails.split(';').map((part) => part.trim()).filter(Boolean)
+                        : [];
+                    const titleChangeIndex = detailParts.findIndex((part) => part.startsWith('Title:'));
+                    const titleChange = titleChangeIndex >= 0 ? detailParts[titleChangeIndex] : "";
+                    if (titleChangeIndex >= 0) detailParts.splice(titleChangeIndex, 1);
+                    let details = detailParts.join('; ');
+                    if (id) details = details ? `${details} | ID: ${id}` : `ID: ${id}`;
+                    const timestamp = parts[0].trim();
+                    const dateOnly = timestamp.split('T')[0] || timestamp;
+                    return {
+                        timestamp,
+                        dateOnly,
+                        type: parts[1].trim(),
+                        title,
+                        titleChange,
+                        details
+                    };
+                }).filter(Boolean);
+                logSortCol = 0;
+                logSortAsc = false;
+                doLogSort();
+                renderLogTable();
             } else {
                 viewMode = 'main';
                 main.style.display = 'table';
@@ -393,6 +418,44 @@
                 btn.classList.remove("primary");
                 renderTable();
             }
+        }
+
+        function setLogSort(col) {
+            if (logSortCol === col) logSortAsc = !logSortAsc;
+            else { logSortCol = col; logSortAsc = true; }
+            doLogSort();
+            renderLogTable();
+        }
+
+        function doLogSort() {
+            logEntries.sort((a, b) => {
+                let vA = a.timestamp;
+                let vB = b.timestamp;
+                if (logSortCol === 1) { vA = a.type; vB = b.type; }
+                if (logSortCol === 2) { vA = a.title; vB = b.title; }
+                if (logSortCol === 3) { vA = a.titleChange; vB = b.titleChange; }
+                if (logSortCol === 4) { vA = a.details; vB = b.details; }
+                if (logSortCol === 0) { vA = Date.parse(vA) || 0; vB = Date.parse(vB) || 0; }
+                if (vA < vB) return logSortAsc ? -1 : 1;
+                if (vA > vB) return logSortAsc ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function renderLogTable() {
+            const tb = document.getElementById('logsBody');
+            if (!logEntries.length) {
+                tb.innerHTML = '<tr><td colspan="5">No Logs.</td></tr>';
+                return;
+            }
+            let html = "";
+            for (const entry of logEntries) {
+                let badge = entry.type;
+                if (entry.type === 'NEW') badge = '<span class="badge-new">NEW</span>';
+                if (entry.type === 'MOD') badge = '<span class="badge-mod">MOD</span>';
+                html += `<tr><td>${entry.dateOnly}</td><td>${badge}</td><td>${entry.title}</td><td>${entry.titleChange}</td><td>${entry.details}</td></tr>`;
+            }
+            tb.innerHTML = html;
         }
 
         async function doAction(url) {
