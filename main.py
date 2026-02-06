@@ -389,6 +389,17 @@ def get_logs(_auth: bool = Depends(authenticate)):
             logs = ["Error reading log file"]
     return logs
 
+@app.post("/api/logs/clear")
+def clear_logs(_auth: bool = Depends(authenticate)):
+    log_path = "data/scraper_history.log"
+    try:
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write("")
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 # --- Startup ---
 def schedule_loop():
     while True:

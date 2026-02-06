@@ -180,6 +180,7 @@
 
         <div class="toolbar-right">
             <button class="success" onclick="location.href='/api/export'">Export CSV</button>
+            <button id="clearLogsBtn" onclick="clearLogs()" style="display:none;">Clear Logs</button>
             <button id="logsBtn" onclick="toggleLogs()">Logs</button>
         </div>
     </div>
@@ -365,6 +366,7 @@
             const main = document.getElementById('mainTable');
             const logs = document.getElementById('logsTable');
             const btn = document.getElementById('logsBtn');
+            const clearBtn = document.getElementById('clearLogsBtn');
 
             if (viewMode === 'main') {
                 viewMode = 'logs';
@@ -372,6 +374,7 @@
                 logs.style.display = 'table';
                 btn.innerText = "Back to Table";
                 btn.classList.add("primary");
+                clearBtn.style.display = 'inline-block';
                 
                 const tb = document.getElementById('logsBody');
                 tb.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
@@ -405,8 +408,22 @@
                 logs.style.display = 'none';
                 btn.innerText = "Logs";
                 btn.classList.remove("primary");
+                clearBtn.style.display = 'none';
                 renderTable();
             }
+        }
+
+        async function clearLogs() {
+            if(!confirm("Wenn du das tust, löschst du das gesamte Internet!")) return;
+            try {
+                const r = await fetch('/api/logs/clear', {method:'POST'});
+                const j = await r.json();
+                if(j.status !== 'ok') { alert(j.message || "Fehler"); return; }
+                if(viewMode === 'logs') {
+                    allLogs = [];
+                    renderLogs();
+                }
+            } catch(e) { alert(e); }
         }
 
         function setLogSort(col) {
