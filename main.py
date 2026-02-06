@@ -4,6 +4,7 @@ import time
 import os
 import secrets
 import math
+import json
 from datetime import datetime
 from threading import Lock
 from typing import List, Dict, Optional
@@ -43,6 +44,7 @@ templates = Jinja2Templates(directory="templates")
 # Configuration
 WEB_PASSWORD = os.getenv("WEB_PASSWORD", "Audible26")
 COOKIE_NAME = "scraper_auth"
+SCRAPE_SNAPSHOT_FILE = os.path.join("data", "last_scrape.json")
 
 # Setup Assets
 os.makedirs("assets", exist_ok=True)
@@ -76,6 +78,21 @@ def load_data():
         except Exception as e:
             logger.error(f"Failed to load entries: {e}")
             entries_map = {}
+
+def load_scrape_snapshot() -> Dict[str, Dict]:
+    if not os.path.exists(SCRAPE_SNAPSHOT_FILE):
+        return {}
+    try:
+        with open(SCRAPE_SNAPSHOT_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def save_scrape_snapshot(snapshot: Dict[str, Dict]):
+    os.makedirs(os.path.dirname(SCRAPE_SNAPSHOT_FILE), exist_ok=True)
+    with open(SCRAPE_SNAPSHOT_FILE, "w", encoding="utf-8") as f:
+        json.dump(snapshot, f, indent=2, ensure_ascii=False)
 
 def authenticate(request: Request, creds: Optional[HTTPBasicCredentials] = Depends(security)):
     # 1. Check Cookie (Browser)
@@ -120,6 +137,8 @@ def run_full_cycle():
         scraper = AudibleScraper()
         new_count = 0
         current_time = datetime.now().isoformat()
+        prev_snapshot = load_scrape_snapshot()
+        new_snapshot = {}
         
         # We process each URL
         all_scraped = []
@@ -140,8 +159,15 @@ def run_full_cycle():
             changes_log = []
             
             for entry in all_scraped:
+                new_snapshot[entry.id] = {
+                    "title": entry.title or "",
+                    "release_date": entry.release_date or "",
+                    "price_without_sub": entry.price_without_sub or ""
+                }
+
                 if entry.id not in entries_map:
                     entry.is_new = True
+                    entry.is_changed = False
                     entry.first_seen = current_time
                     entry.last_seen = current_time
                     entries_map[entry.id] = entry
@@ -154,9 +180,21 @@ def run_full_cycle():
                     
                     # Detect Changes
                     diffs = []
-                    if existing.release_date != entry.release_date: diffs.append(f"Release: {existing.release_date}->{entry.release_date}")
-                    if existing.price_without_sub != entry.price_without_sub: diffs.append(f"Price: {existing.price_without_sub}->{entry.price_without_sub}")
-                    if existing.title != entry.title: diffs.append(f"Title: {old_title} -> {entry.title}")
+                    prev = prev_snapshot.get(entry.id)
+                    if prev is not None:
+                        prev_release = prev.get("release_date", "")
+                        prev_price = prev.get("price_without_sub", "")
+                        prev_title = prev.get("title", "")
+                        cur_release = entry.release_date or ""
+                        cur_price = entry.price_without_sub or ""
+                        cur_title = entry.title or ""
+
+                        if prev_release != cur_release:
+                            diffs.append(f"Release: {prev_release or '-'}->{cur_release or '-'}")
+                        if prev_price != cur_price:
+                            diffs.append(f"Price: {prev_price or '-'}->{cur_price or '-'}")
+                        if prev_title != cur_title:
+                            diffs.append(f"Title: {prev_title or '-'} -> {cur_title or '-'}")
                     
                     # Merge fields
                     existing.title = entry.title
@@ -165,14 +203,18 @@ def run_full_cycle():
                     existing.runtime = entry.runtime
                     existing.rating = entry.rating
                     existing.rating_count = entry.rating_count
+                    existing.author = entry.author
                     if entry.subtitle: existing.subtitle = entry.subtitle
                     
                     if diffs:
                          existing.is_changed = True
                          log_entry = f"{current_time} | MOD | {entry.title} ({entry.id}) | {', '.join(diffs)}"
                          changes_log.append(log_entry)
+                    else:
+                         existing.is_changed = False
             
             save_entries(entries_map)
+            save_scrape_snapshot(new_snapshot)
             
             # Write Change Log to Disk
             if changes_log:
