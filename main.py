@@ -121,7 +121,7 @@ def authenticate(request: Request, creds: Optional[HTTPBasicCredentials] = Depen
 
 # --- Tasks ---
 
-def run_full_cycle():
+def run_full_cycle(source: str = "manual"):
     global is_running, last_message, entries_map
     if is_running:
         return
@@ -130,6 +130,15 @@ def run_full_cycle():
     last_message = "Starting cycle..."
     
     try:
+        # Log run start (manual/auto)
+        run_time = datetime.now().isoformat()
+        try:
+            os.makedirs("data", exist_ok=True)
+            with open("data/scraper_history.log", "a", encoding="utf-8") as f:
+                f.write(f"{run_time} | RUN | Scrape started | Source: {source}\n")
+        except Exception as e:
+            logger.error(f"Failed to write run log: {e}")
+
         # 1. Scrape Audible
         last_message = "Scraping Audible..."
         logger.info(last_message)
@@ -328,7 +337,7 @@ def trigger_scrape(background_tasks: BackgroundTasks, _auth: bool = Depends(auth
     global is_running
     if is_running:
         return {"status": "error", "message": "Task already running"}
-    background_tasks.add_task(run_full_cycle)
+    background_tasks.add_task(run_full_cycle, "manual")
     return {"status": "ok", "message": "Scrape started"}
 
 @app.post("/api/update_n8n")
@@ -406,7 +415,7 @@ def schedule_loop():
         # Run every 24 hours
         time.sleep(86400)
         logger.info("Automatic schedule triggered.")
-        run_full_cycle()
+        run_full_cycle("auto")
 
 @app.on_event("startup")
 def startup_event():
