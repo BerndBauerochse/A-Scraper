@@ -219,8 +219,9 @@
         <table id="logsTable" style="display:none;">
             <thead>
                 <tr>
-                    <th style="width:80px;">Type</th>
-                    <th style="width:300px;">Title</th>
+                    <th style="width:180px;" onclick="setLogSort(0)">Date</th>
+                    <th style="width:80px;" onclick="setLogSort(1)">Type</th>
+                    <th style="width:300px;" onclick="setLogSort(2)">Title</th>
                     <th>Details</th>
                 </tr>
             </thead>
@@ -234,6 +235,9 @@
         let sortAsc = false;
         let viewMode = 'main';
         let onlyUpdates = false;
+        let allLogs = [];
+        let logSortCol = 0; // Date
+        let logSortAsc = false;
 
         loadData();
         setInterval(checkStatus, 3000);
@@ -370,21 +374,31 @@
                 btn.classList.add("primary");
                 
                 const tb = document.getElementById('logsBody');
-                tb.innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+                tb.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
                 const r = await fetch('/api/logs');
                 const data = await r.json();
                 
-                let html = "";
+                allLogs = [];
                 for(const l of data) {
-                    const p = l.split('|');
+                    const p = l.split('|').map(s => s.trim());
                     if(p.length < 3) continue;
-                    let type=p[1].trim(), ti=p[2].trim().replace(/\(.*\)$/,''), det=p.slice(3).join(' ');
-                    let b = type;
-                    if(type=='NEW') b='<span class="badge-new">NEW</span>';
-                    if(type=='MOD') b='<span class="badge-mod">MOD</span>';
-                    html += `<tr><td>${b}</td><td>${ti}</td><td>${det}</td></tr>`;
+                    const dateStr = p[0] || "";
+                    const type = p[1] || "";
+                    const titleRaw = p[2] || "";
+                    const details = p.slice(3).join(' | ').trim();
+                    const idMatch = titleRaw.match(/\(([^)]+)\)\s*$/);
+                    const title = titleRaw.replace(/\s*\(.*\)\s*$/,'').trim();
+                    allLogs.push({
+                        dateStr: dateStr,
+                        dateTs: Date.parse(dateStr) || 0,
+                        type: type,
+                        title: title,
+                        details: details,
+                        id: idMatch ? idMatch[1] : ""
+                    });
                 }
-                tb.innerHTML = html || '<tr><td colspan="3">No Logs.</td></tr>';
+                doLogSort();
+                renderLogs();
             } else {
                 viewMode = 'main';
                 main.style.display = 'table';
@@ -393,6 +407,48 @@
                 btn.classList.remove("primary");
                 renderTable();
             }
+        }
+
+        function setLogSort(col) {
+            if(logSortCol === col) logSortAsc = !logSortAsc;
+            else { logSortCol = col; logSortAsc = true; }
+            if(logSortCol === 0 && col !== logSortCol) logSortAsc = false;
+            doLogSort();
+            renderLogs();
+        }
+
+        function doLogSort() {
+            allLogs.sort((a, b) => {
+                let vA = logVal(a, logSortCol);
+                let vB = logVal(b, logSortCol);
+                if (vA < vB) return logSortAsc ? -1 : 1;
+                if (vA > vB) return logSortAsc ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function logVal(e, c) {
+            switch(c) {
+                case 0: return e.dateTs || 0;
+                case 1: return e.type || "";
+                case 2: return e.title || "";
+                case 3: return e.details || "";
+                default: return "";
+            }
+        }
+
+        function renderLogs() {
+            const tb = document.getElementById('logsBody');
+            let html = "";
+            for(const l of allLogs) {
+                let b = l.type;
+                if(l.type=='NEW') b='<span class="badge-new">NEW</span>';
+                if(l.type=='MOD') b='<span class="badge-mod">MOD</span>';
+                const dateDisplay = (l.dateStr || "").replace('T',' ');
+                const details = l.details || (l.id ? `ID: ${l.id}` : "");
+                html += `<tr><td>${dateDisplay}</td><td>${b}</td><td>${l.title}</td><td>${details}</td></tr>`;
+            }
+            tb.innerHTML = html || '<tr><td colspan="4">No Logs.</td></tr>';
         }
 
         async function doAction(url) {

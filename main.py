@@ -149,15 +149,17 @@ def run_full_cycle():
                     changes_log.append(f"{current_time} | NEW | {entry.title} ({entry.id})")
                 else:
                     existing = entries_map[entry.id]
+                    old_title = existing.title
                     existing.last_seen = current_time
                     
                     # Detect Changes
                     diffs = []
                     if existing.release_date != entry.release_date: diffs.append(f"Release: {existing.release_date}->{entry.release_date}")
                     if existing.price_without_sub != entry.price_without_sub: diffs.append(f"Price: {existing.price_without_sub}->{entry.price_without_sub}")
-                    if existing.title != entry.title: diffs.append(f"Title updated")
+                    if existing.title != entry.title: diffs.append(f"Title: {old_title} -> {entry.title}")
                     
                     # Merge fields
+                    existing.title = entry.title
                     existing.price_without_sub = entry.price_without_sub
                     existing.release_date = entry.release_date
                     existing.runtime = entry.runtime
