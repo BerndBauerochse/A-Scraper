@@ -15,9 +15,10 @@ warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 class UpdateManager:
     N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "https://n8n.der-audio-verlag.de/webhook/389acb40-3902-4f50-a3e8-e99f77a7b7ff")
 
-    def __init__(self, entries_map: Dict, save_callback: Callable):
+    def __init__(self, entries_map: Dict, save_callback: Callable, history_callback: Callable = None):
         self.entries_map = entries_map
         self.save_callback = save_callback
+        self.history_callback = history_callback
         self.log_callback = print 
 
     def set_log_callback(self, callback):
@@ -137,6 +138,8 @@ class UpdateManager:
     def update_database(self, df: pd.DataFrame) -> int:
         self.log("Aktualisiere Datenbank...")
         updated_count = 0
+        timestamp = datetime.now().isoformat()
+        history_lines = []
         
         # Create a lookup map for the DataFrame for faster access
         # Key: Shoplink Audible (normalized)
@@ -188,33 +191,34 @@ class UpdateManager:
             
             if match_row is not None:
                 # Found a match!
-                changed = False
+                # Detect specific changes
+                diffs = []
                 
                 # Update EAN if missing
-                new_ean = match_row["EAN digital"]
-                if not entry.ean and new_ean:
-                    entry.ean = new_ean
-                    changed = True
-                elif entry.ean and new_ean and entry.ean != new_ean:
-                     # User said: "1 der 'EAN digital' falls sie noch nicht vorhanden ist"
-                     # So if it IS present, do we overwrite? "falls sie noch nicht vorhanden ist" implies NO.
-                     # But usually updates imply overwriting.
-                     # "falls sie noch nicht vorhanden ist" -> If NOT present.
-                     pass
+                new_ean = str(match_row["EAN digital"]).strip()
+                if new_ean:
+                     if not entry.ean: # Update only if missing
+                         diffs.append(f"EAN: '' -> '{new_ean}'")
+                         entry.ean = new_ean
+                         changed = True
 
                 # Update Price
                 # "nach dem 'Preis digital DE' der den Preis LZ ersetzten soll"
-                # This implies ALWAYS replace/set.
-                new_price = match_row["Preis digital DE"]
+                new_price = str(match_row["Preis digital DE"]).strip()
                 if new_price:
                     if entry.price_digital_de != new_price:
+                        diffs.append(f"Price (DB): '{entry.price_digital_de}' -> '{new_price}'")
                         entry.price_digital_de = new_price
                         changed = True
                 
                 if changed:
                     updated_count += 1
+                    if diffs:
+                         history_lines.append(f"{timestamp} | MOD | {entry.title} ({entry.id}) | {', '.join(diffs)}")
 
         if updated_count > 0:
             self.save_callback(self.entries_map)
+            if self.history_callback and history_lines:
+                self.history_callback(history_lines)
             
         return updated_count

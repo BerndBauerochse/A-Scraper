@@ -170,6 +170,10 @@ def run_full_cycle(source: str = "manual"):
             for entry in all_scraped:
                 new_snapshot[entry.id] = {
                     "title": entry.title or "",
+                    "subtitle": entry.subtitle or "",
+                    "author": entry.author or "",
+                    "rating": entry.rating or "",
+                    "rating_count": entry.rating_count or 0,
                     "release_date": entry.release_date or "",
                     "price_without_sub": entry.price_without_sub or ""
                 }
@@ -191,19 +195,44 @@ def run_full_cycle(source: str = "manual"):
                     diffs = []
                     prev = prev_snapshot.get(entry.id)
                     if prev is not None:
-                        prev_release = prev.get("release_date", "")
-                        prev_price = prev.get("price_without_sub", "")
-                        prev_title = prev.get("title", "")
-                        cur_release = entry.release_date or ""
-                        cur_price = entry.price_without_sub or ""
-                        cur_title = entry.title or ""
+                        # Helper: use snapshot value if present, else DB value (to avoid initial diff spam)
+                        def g(k, d): return prev[k] if k in prev else d
 
-                        if prev_release != cur_release:
-                            diffs.append(f"Release: {prev_release or '-'}->{cur_release or '-'}")
-                        if prev_price != cur_price:
-                            diffs.append(f"Price: {prev_price or '-'}->{cur_price or '-'}")
-                        if prev_title != cur_title:
-                            diffs.append(f"Title: {prev_title or '-'} -> {cur_title or '-'}")
+                        # Extract previous values
+                        prev_vals = {
+                            "release": g("release_date", existing.release_date or ""),
+                            "price": g("price_without_sub", existing.price_without_sub or ""),
+                            "title": g("title", existing.title or ""),
+                            "subtitle": g("subtitle", existing.subtitle or ""),
+                            "author": g("author", existing.author or ""),
+                            "rating": g("rating", existing.rating or ""),
+                            "count": g("rating_count", existing.rating_count or 0)
+                        }
+                        
+                        cur_vals = {
+                            "release": entry.release_date or "",
+                            "price": entry.price_without_sub or "",
+                            "title": entry.title or "",
+                            "subtitle": entry.subtitle or "",
+                            "author": entry.author or "",
+                            "rating": entry.rating or "",
+                            "count": entry.rating_count or 0
+                        }
+
+                        if prev_vals["release"] != cur_vals["release"]:
+                            diffs.append(f"Release: '{prev_vals['release']}' -> '{cur_vals['release']}'")
+                        if prev_vals["price"] != cur_vals["price"]:
+                            diffs.append(f"Price: '{prev_vals['price']}' -> '{cur_vals['price']}'")
+                        if prev_vals["title"] != cur_vals["title"]:
+                            diffs.append(f"Title: '{prev_vals['title']}' -> '{cur_vals['title']}'")
+                        if prev_vals["subtitle"] != cur_vals["subtitle"]:
+                            diffs.append(f"Subtitle: '{prev_vals['subtitle']}' -> '{cur_vals['subtitle']}'")
+                        if prev_vals["author"] != cur_vals["author"]:
+                            diffs.append(f"Author: '{prev_vals['author']}' -> '{cur_vals['author']}'")
+                        if prev_vals["rating"] != cur_vals["rating"]:
+                            diffs.append(f"Rating: '{prev_vals['rating']}' -> '{cur_vals['rating']}'")
+                        if prev_vals["count"] != cur_vals["count"]:
+                            diffs.append(f"Count: {prev_vals['count']} -> {cur_vals['count']}")
                     
                     # Merge fields
                     existing.title = entry.title
@@ -213,7 +242,7 @@ def run_full_cycle(source: str = "manual"):
                     existing.rating = entry.rating
                     existing.rating_count = entry.rating_count
                     existing.author = entry.author
-                    if entry.subtitle: existing.subtitle = entry.subtitle
+                    existing.subtitle = entry.subtitle
                     
                     if diffs:
                          existing.is_changed = True
@@ -259,8 +288,17 @@ def run_n8n_update_task():
         def safe_save_callback(updated_map):
             with db_lock:
                 save_entries(updated_map)
-                
-        manager = UpdateManager(current_map, safe_save_callback)
+        
+        def history_callback(lines):
+            try:
+                os.makedirs("data", exist_ok=True)
+                with open("data/scraper_history.log", "a", encoding="utf-8") as f:
+                    for line in lines:
+                        f.write(line + "\n")
+            except Exception as e:
+                logger.error(f"Failed to write history log: {e}")
+
+        manager = UpdateManager(current_map, safe_save_callback, history_callback)
         # Hook logger
         manager.set_log_callback(logger.info)
         
