@@ -2,11 +2,12 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Audible Scraper Web</title>
     <style>
         :root {
             --bg-color: #1e1e1e;
-            --card-bg: rgba(30, 30, 30, 0.90); 
+            --card-bg: rgba(30, 30, 30, 0.90);
             --primary: #0078d7;
             --text: #ffffff;
             --border: rgba(255,255,255,0.15);
@@ -25,7 +26,7 @@
             backdrop-filter: blur(5px);
             overflow: hidden;
         }
-        
+
         * { scrollbar-width: none; }
         *::-webkit-scrollbar { display: none; }
 
@@ -35,16 +36,16 @@
             background: rgba(0, 0, 0, 0.6); z-index: -1;
         }
 
-        /* 2. Toolbar - MATCHING SCREENSHOT */
+        /* 2. Toolbar */
         .toolbar {
             background-color: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: 6px;
-            padding: 12px 15px; 
+            padding: 12px 15px;
             margin-bottom: 20px;
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between; /* push Left / Center / Right apart */
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             flex-shrink: 0;
         }
@@ -57,21 +58,22 @@
 
         /* Buttons */
         button {
-            background-color: #3a3a3a; /* Default Dark Grey like screenshot */
-            color: #ddd; 
+            background-color: #3a3a3a;
+            color: #ddd;
             border: 1px solid #555;
-            padding: 8px 16px; 
-            border-radius: 4px; 
-            font-weight: 600; 
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: 600;
             cursor: pointer;
             font-size: 13px;
             transition: all 0.2s;
+            white-space: nowrap;
         }
         button:hover { background-color: #4a4a4a; color: white; }
-        
+
         button.primary { background-color: var(--primary); border-color: var(--primary); color: white; }
         button.primary:hover { background-color: #0063b1; }
-        
+
         button.success { background-color: #28a745; border-color: #28a745; color: white; }
         button.success:hover { background-color: #218838; }
 
@@ -93,10 +95,10 @@
             background: currentColor;
         }
 
-        /* Search Input - RECTANGULAR & DARK (Screenshot style) */
+        /* Search Input */
         input[type="text"] {
             padding: 8px 12px;
-            border-radius: 4px; /* Rectangular */
+            border-radius: 4px;
             border: 1px solid #444;
             background-color: #222;
             color: white;
@@ -111,10 +113,10 @@
             background-color: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: 6px;
-            padding: 8px 15px; 
+            padding: 8px 15px;
             margin-bottom: 10px;
-            border-left: 4px solid var(--primary); /* Blue indicator left */
-            display: flex; justify-content: space-between; 
+            border-left: 4px solid var(--primary);
+            display: flex; justify-content: space-between;
             font-family: 'Consolas', monospace; font-size: 12px; color: #ccc;
             flex-shrink: 0;
         }
@@ -122,23 +124,24 @@
         /* 4. Table */
         .table-container {
             flex-grow: 1;
-            overflow-y: scroll;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
             background-color: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: 6px;
         }
 
         table { width: 100%; border-collapse: collapse; min-width: 1200px; font-size: 13px; }
-        
-        th { 
+
+        th {
             background: #2a2a2a; color: #eee; padding: 12px 10px; text-align: left; font-weight: 600;
             position: sticky; top: 0; z-index: 10; cursor: pointer; user-select: none;
             border-bottom: 2px solid #444;
         }
         th:hover { background: #333; }
 
-        td { 
-            padding: 8px 10px; border-bottom: 1px solid #3a3a3a; 
+        td {
+            padding: 8px 10px; border-bottom: 1px solid #3a3a3a;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
         }
         tr:hover td { background: #333; }
@@ -153,13 +156,105 @@
 
         /* Logs Table Styles */
         #logsTable td { white-space: normal; line-height: 1.4; color: #ccc; max-width: none; }
+
+        /* ========== MOBILE RESPONSIVE ========== */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+                overflow-y: auto;
+            }
+
+            /* Header */
+            .header {
+                margin-bottom: 10px !important;
+            }
+            .header h1 {
+                font-size: 20px !important;
+            }
+
+            /* Toolbar: stack vertically */
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+                padding: 10px;
+                margin-bottom: 10px;
+            }
+
+            .toolbar-left, .toolbar-center, .toolbar-right {
+                justify-content: center;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .toolbar-center {
+                flex-grow: 0;
+                order: -1;
+            }
+
+            /* Search input full width on mobile */
+            input[type="text"] {
+                min-width: 0;
+                width: 100%;
+                flex: 1;
+                font-size: 16px; /* prevents iOS zoom on focus */
+            }
+
+            /* Buttons slightly smaller on mobile */
+            button {
+                padding: 10px 14px;
+                font-size: 13px;
+            }
+
+            /* Status bar */
+            .status-bar {
+                font-size: 11px;
+                padding: 6px 10px;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            /* Table container: allow horizontal scroll */
+            .table-container {
+                border-radius: 6px;
+                min-height: 0;
+            }
+
+            table {
+                min-width: 900px;
+                font-size: 12px;
+            }
+
+            th { padding: 10px 6px; font-size: 11px; }
+            td { padding: 6px; max-width: 150px; font-size: 12px; }
+        }
+
+        /* Extra small screens (iPhone SE, etc.) */
+        @media (max-width: 390px) {
+            body { padding: 6px; }
+
+            .header h1 { font-size: 18px !important; }
+
+            .toolbar { padding: 8px; gap: 8px; }
+
+            .toolbar-left, .toolbar-right {
+                width: 100%;
+            }
+            .toolbar-left button, .toolbar-right button {
+                flex: 1;
+                text-align: center;
+            }
+
+            button { padding: 10px 10px; font-size: 12px; }
+
+            table { min-width: 800px; }
+        }
     </style>
 </head>
 <body>
 
-    <div style="display:flex; justify-content:space-between; margin-bottom:15px; flex-shrink:0;">
+    <div class="header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-shrink:0;">
         <h1 style="margin:0; font-weight:300; font-size: 26px;">Audible Scraper</h1>
-        <div style="font-size:12px; opacity:0.6;">v2.5 (Design Restore)</div>
+        <div style="font-size:12px; opacity:0.6;">v2.5</div>
     </div>
 
     <!-- Toolbar: Flex-spaced Groups -->
