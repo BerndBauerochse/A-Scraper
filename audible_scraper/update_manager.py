@@ -163,6 +163,11 @@ class UpdateManager:
             if match:
                 return match.group(1)
             return ""
+
+        def is_missing(value) -> bool:
+            """Treat common placeholder values as empty."""
+            s = str(value).strip().lower()
+            return s in ("", "nan", "none", "null", "0")
             
         # Build lookup from Excel/DataFrame
         excel_lookup = {}
@@ -193,11 +198,12 @@ class UpdateManager:
                 # Found a match!
                 # Detect specific changes
                 diffs = []
+                changed = False
                 
                 # Update EAN if missing
                 new_ean = str(match_row["EAN digital"]).strip()
                 if new_ean:
-                     if not entry.ean: # Update only if missing
+                     if is_missing(entry.ean): # Update only if missing
                          diffs.append(f"EAN: '' -> '{new_ean}'")
                          entry.ean = new_ean
                          changed = True
