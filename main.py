@@ -408,7 +408,7 @@ def export_csv(_auth: bool = Depends(authenticate)):
                 entry.title,
                 entry.subtitle,
                 entry.author,
-                entry.ean_digital, # FIXED: using ean_digital as per model
+                entry.ean,
                 entry.price_digital_de,
                 entry.runtime_price,
                 entry.price_without_sub,
