@@ -505,8 +505,8 @@ class MainWindow(QMainWindow):
         
         self.export_btn = QPushButton()
         self.export_btn.setIcon(self.create_excel_icon())
-        self.export_btn.setToolTip("Export Excel/CSV")
-        self.export_btn.setFixedWidth(40) # Square-ish button
+        self.export_btn.setToolTip("Aktuelle Ansicht als CSV exportieren")
+        self.export_btn.setFixedWidth(40)
         self.export_btn.clicked.connect(self.export_data)
         self.top_layout.addWidget(self.export_btn)
         
@@ -793,51 +793,62 @@ class MainWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl(entry.url))
 
     def export_data(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Exportieren", "audible_liste.csv", "CSV Dateien (*.csv)")
+        # Export the currently visible/filtered list
+        entries_to_export = list(self.model.entries)
+        if not entries_to_export:
+            QMessageBox.information(self, "Export", "Keine Einträge zum Exportieren vorhanden.")
+            return
+
+        is_filtered = not self.show_all_btn.isChecked()
+        default_name = "audible_log.csv" if is_filtered else "audible_liste.csv"
+
+        file_path, _ = QFileDialog.getSaveFileName(self, "Exportieren", default_name, "CSV Dateien (*.csv)")
         if not file_path:
             return
 
         try:
-            # Export all entries currently in the map (entire list)
-            all_entries = list(self.entries_map.values())
-            
-            # Sort them for nicer output (e.g. by date desc)
             def date_key(entry):
                 try:
                     return datetime.strptime(entry.release_date, "%d.%m.%Y")
                 except ValueError:
                     return datetime.min
-            all_entries.sort(key=date_key, reverse=True)
+            entries_to_export.sort(key=date_key, reverse=True)
 
             with open(file_path, mode='w', newline='', encoding='utf-8-sig') as file:
                 writer = csv.writer(file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-                
-                # Header
-                writer.writerow(["ID", "Titel", "Untertitel", "Autor", "Bewertung", "VÖ-Datum", "Laufzeit (Min)", "Preis (LZ)", "Preis", "EAN", "URL", "Neu?", "Geändert?", "Erstmals gesehen", "Zuletzt gesehen"])
-                
-                # Rows
-                for entry in all_entries:
+
+                writer.writerow(["ID", "Titel", "Untertitel", "Autor", "Bewertung", "Anz. Bewertungen", "VÖ-Datum", "Laufzeit (Min)", "Preis (LZ)", "Preis", "EAN", "URL", "Status", "Erstmals gesehen", "Zuletzt gesehen"])
+
+                for entry in entries_to_export:
+                    if not entry.ean:
+                        status = "ToDo"
+                    elif entry.is_new:
+                        status = "Neu"
+                    elif entry.is_changed:
+                        status = "Geändert"
+                    else:
+                        status = ""
                     writer.writerow([
                         entry.id,
                         entry.title,
                         entry.subtitle,
                         entry.author,
                         entry.rating,
+                        entry.rating_count,
                         entry.release_date,
                         entry.runtime,
                         entry.calculated_price,
                         entry.price_without_sub,
                         entry.ean,
                         entry.url,
-                        "JA" if entry.is_new else "NEIN",
-                        "JA" if entry.is_changed else "NEIN",
+                        status,
                         entry.first_seen,
                         entry.last_seen
                     ])
-            
-            self.update_status(f"Export erfolgreich: {len(all_entries)} Zeilen gespeichert.")
+
+            self.update_status(f"Export erfolgreich: {len(entries_to_export)} Zeilen gespeichert.")
             QMessageBox.information(self, "Export", f"Daten erfolgreich nach {file_path} exportiert.")
-            
+
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Export: {e}")
 

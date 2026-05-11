@@ -1,9 +1,14 @@
 import requests
+import time
 from bs4 import BeautifulSoup
 import re
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode, urlunparse
 from typing import List, Optional
 from .models import Entry
+
+MAX_RETRIES = 3
+RETRY_DELAY = 2.0   # seconds between retries (multiplied by attempt number)
+PAGE_DELAY = 0.75   # seconds between pages to avoid rate limiting
 
 class AudibleScraper:
     def __init__(self):
@@ -46,49 +51,83 @@ class AudibleScraper:
         ))
         return new_url
 
+    def _increment_page_url(self, url: str) -> str:
+        """Constructs the next page URL by incrementing the page parameter."""
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        current_page = int(params.get("page", ["1"])[0])
+        params["page"] = [str(current_page + 1)]
+        new_query = urlencode(params, doseq=True)
+        return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, ""))
+
+    def _fetch_page_with_retry(self, url: str, page_num: int):
+        """Fetches a single page with retry logic. Returns (entries, next_url) or (None, None) on failure."""
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = self.session.get(url, timeout=20)
+                response.raise_for_status()
+
+                entries, next_url = self.parse_page(response.text, url)
+
+                if page_num == 1:
+                    with open("debug_audible.html", "w", encoding="utf-8") as f:
+                        f.write(response.text)
+
+                return entries, next_url
+
+            except requests.RequestException as e:
+                wait = RETRY_DELAY * (attempt + 1)
+                print(f"Attempt {attempt + 1}/{MAX_RETRIES} failed for {url}: {e} — waiting {wait:.0f}s")
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(wait)
+
+        print(f"All {MAX_RETRIES} attempts failed for {url}, skipping page.")
+        return None, None
+
     def fetch_all_pages(self, start_url: str, progress_callback=None) -> List[Entry]:
         """Fetches all pages starting from the given URL."""
         all_entries = []
-        # Normalize the start URL
         current_url = self._normalize_url(start_url)
         page_num = 1
-        
-        # Keep track of visited URLs to avoid cycles even with normalization
         visited_urls = set()
-        
-        while current_url:
+        MAX_PAGES = 200  # safety limit
+
+        while current_url and page_num <= MAX_PAGES:
             if current_url in visited_urls:
                 print(f"Cycle detected or duplicate page: {current_url}")
                 break
             visited_urls.add(current_url)
-            
-            print(f"Fetching: {current_url}")
+
+            print(f"Fetching page {page_num}: {current_url}")
             if progress_callback:
                 progress_callback(page_num)
-                
-            try:
-                response = self.session.get(current_url, timeout=10)
-                response.raise_for_status()
-                
-                entries, next_page_url = self.parse_page(response.text, current_url)
-                
-                if page_num == 1:
-                    with open("debug_audible.html", "w", encoding="utf-8") as f:
-                        f.write(response.text)
-                        
-                all_entries.extend(entries)
-                
-                if next_page_url:
-                    current_url = self._normalize_url(next_page_url)
+
+            entries, next_page_url = self._fetch_page_with_retry(current_url, page_num)
+
+            if entries is None:
+                # Page failed after all retries — try to jump to next page by URL
+                fallback_url = self._normalize_url(self._increment_page_url(current_url))
+                if fallback_url not in visited_urls:
+                    print(f"Trying fallback URL for page {page_num + 1}: {fallback_url}")
+                    current_url = fallback_url
+                    page_num += 1
+                    time.sleep(PAGE_DELAY)
+                    continue
                 else:
-                    current_url = None
-                    
-                page_num += 1
-                
-            except requests.RequestException as e:
-                print(f"Error fetching {current_url}: {e}")
-                break
-                
+                    break
+            else:
+                all_entries.extend(entries)
+
+            if next_page_url:
+                current_url = self._normalize_url(next_page_url)
+            else:
+                current_url = None
+
+            page_num += 1
+
+            if current_url:
+                time.sleep(PAGE_DELAY)
+
         return all_entries
 
     def parse_page(self, html: str, base_url: str) -> (List[Entry], Optional[str]):
