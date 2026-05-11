@@ -4,17 +4,18 @@ import csv
 import os
 from datetime import datetime
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QPushButton, QTableView, QHeaderView, QLabel, 
-    QStatusBar, QMessageBox, QApplication, QStyledItemDelegate, 
-    QStyleOptionButton, QStyle, QLineEdit, QFileDialog
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QTableView, QHeaderView, QLabel,
+    QStatusBar, QMessageBox, QApplication, QStyledItemDelegate,
+    QStyleOptionButton, QStyle, QLineEdit, QFileDialog,
+    QDialog, QDialogButtonBox, QAbstractItemView
 )
 from PySide6.QtCore import Qt, QAbstractTableModel, QThread, Signal, QUrl, QEvent, QModelIndex, QTimer, QRectF
 from PySide6.QtGui import QColor, QBrush, QDesktopServices, QPixmap, QPainter, QPen, QIcon
 
 from .models import Entry
 from .scraper import AudibleScraper
-from .storage import load_entries, save_entries
+from .storage import load_entries, save_entries, load_log, append_log_entry
 from .update_manager import UpdateManager
 
 # --- Loading Spinner ---
@@ -212,6 +213,104 @@ class UpdateWorker(QThread):
         self.manager.set_log_callback(self.progress.emit)
         success, msg = self.manager.run_update()
         self.finished.emit(success, msg)
+
+# --- Log Dialog ---
+class LogDialog(QDialog):
+    LOG_HEADERS = ["Zeitpunkt", "Typ", "Einträge gesamt", "Neu", "Geändert", "Details"]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Log Dashboard")
+        self.resize(900, 500)
+        self.log_entries = load_log()
+
+        layout = QVBoxLayout(self)
+
+        self.table = QTableView()
+        self.log_model = LogTableModel(self.log_entries)
+        self.table.setModel(self.log_model)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setColumnWidth(0, 155)
+        self.table.setColumnWidth(1, 80)
+        self.table.setColumnWidth(2, 110)
+        self.table.setColumnWidth(3, 50)
+        self.table.setColumnWidth(4, 70)
+        layout.addWidget(self.table)
+
+        btn_layout = QHBoxLayout()
+        export_btn = QPushButton("Als CSV exportieren")
+        export_btn.clicked.connect(self.export_csv)
+        btn_layout.addWidget(export_btn)
+        btn_layout.addStretch()
+        close_btn = QPushButton("Schließen")
+        close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+    def export_csv(self):
+        if not self.log_entries:
+            QMessageBox.information(self, "Export", "Keine Log-Einträge vorhanden.")
+            return
+        file_path, _ = QFileDialog.getSaveFileName(self, "Log exportieren", "audible_log_dashboard.csv", "CSV Dateien (*.csv)")
+        if not file_path:
+            return
+        try:
+            with open(file_path, mode="w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.writer(f, delimiter=";", quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                writer.writerow(self.LOG_HEADERS)
+                for e in self.log_entries:
+                    writer.writerow([
+                        e.get("timestamp", ""),
+                        e.get("type", ""),
+                        e.get("total", ""),
+                        e.get("new_count", ""),
+                        e.get("changed_count", ""),
+                        e.get("details", ""),
+                    ])
+            QMessageBox.information(self, "Export", f"Log exportiert nach:\n{file_path}")
+        except Exception as ex:
+            QMessageBox.critical(self, "Fehler", f"Export fehlgeschlagen: {ex}")
+
+
+class LogTableModel(QAbstractTableModel):
+    HEADERS = ["Zeitpunkt", "Typ", "Einträge gesamt", "Neu", "Geändert", "Details"]
+
+    def __init__(self, entries=None):
+        super().__init__()
+        self.entries = entries or []
+
+    def rowCount(self, parent=None):
+        return len(self.entries)
+
+    def columnCount(self, parent=None):
+        return len(self.HEADERS)
+
+    def headerData(self, section, orientation, role):
+        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+            return self.HEADERS[section]
+        return None
+
+    def data(self, index, role):
+        if not index.isValid():
+            return None
+        e = self.entries[index.row()]
+        col = index.column()
+        if role == Qt.DisplayRole:
+            if col == 0: return e.get("timestamp", "")
+            if col == 1: return e.get("type", "")
+            if col == 2: return str(e.get("total", ""))
+            if col == 3: return str(e.get("new_count", ""))
+            if col == 4: return str(e.get("changed_count", ""))
+            if col == 5: return e.get("details", "")
+        if role == Qt.ForegroundRole:
+            t = e.get("type", "")
+            if t == "Scrape": return QBrush(QColor("#005a9e"))
+            if t == "DB Update": return QBrush(QColor("#28a745"))
+        return None
+
 
 # --- Table Model ---
 class EntryTableModel(QAbstractTableModel):
@@ -499,6 +598,10 @@ class MainWindow(QMainWindow):
         self.top_layout.addStretch()
         
         # Right Group
+        self.log_btn = QPushButton("Log")
+        self.log_btn.clicked.connect(self.show_log)
+        self.top_layout.addWidget(self.log_btn)
+
         self.update_db_btn = QPushButton("DB Update")
         self.update_db_btn.clicked.connect(self.start_update)
         self.top_layout.addWidget(self.update_db_btn)
@@ -774,7 +877,17 @@ class MainWindow(QMainWindow):
 
         # Save to disk
         save_entries(self.entries_map)
-        
+
+        # Log scrape event
+        append_log_entry({
+            "timestamp": current_time,
+            "type": "Scrape",
+            "total": len(fetched_entries),
+            "new_count": new_count,
+            "changed_count": change_count,
+            "details": f"{len(self.entries_map)} Einträge gesamt in DB",
+        })
+
         # Update UI
         self.update_table_data()
         self.update_status(f"Aktualisiert: {len(fetched_entries)} geladen. {new_count} Neu, {change_count} Geändert.")
@@ -852,6 +965,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Fehler", f"Fehler beim Export: {e}")
 
+    def show_log(self):
+        dialog = LogDialog(self)
+        dialog.exec()
+
     def start_update(self):
         self.update_db_btn.setEnabled(False)
         self.spinner.start()
@@ -865,12 +982,20 @@ class MainWindow(QMainWindow):
     def on_update_finished(self, success, message):
         self.update_db_btn.setEnabled(True)
         self.spinner.stop()
-        
+
+        append_log_entry({
+            "timestamp": datetime.now().isoformat(),
+            "type": "DB Update",
+            "total": "",
+            "new_count": "",
+            "changed_count": "",
+            "details": message,
+        })
+
         if success:
             QMessageBox.information(self, "Update Erfolgreich", message)
-            # Refresh table to show new prices/EANs
             self.update_table_data()
         else:
             QMessageBox.warning(self, "Update Fehlgeschlagen", message)
-            
+
         self.update_status(message)
