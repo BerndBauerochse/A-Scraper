@@ -266,7 +266,7 @@
         </div>
 
         <div class="toolbar-center">
-            <input type="text" id="searchInput" placeholder="Search..." onkeyup="renderTable()">
+            <input type="text" id="searchInput" placeholder="Search..." onkeyup="onSearch()">
             <!-- Styled Toggle Button -->
             <button id="onlyUpdatesBtn" class="toggle-btn" onclick="toggleOnlyUpdates()">
                 <div class="toggle-icon"></div> Only Updates
@@ -274,7 +274,7 @@
         </div>
 
         <div class="toolbar-right">
-            <button class="success" onclick="location.href='/api/export'">Export CSV</button>
+            <button id="exportBtn" class="success" onclick="exportCurrent()">Export CSV</button>
             <button id="clearLogsBtn" onclick="clearLogs()" style="display:none;">Clear Logs</button>
             <button id="logsBtn" onclick="toggleLogs()">Logs</button>
         </div>
@@ -337,6 +337,35 @@
 
         loadData();
         setInterval(checkStatus, 3000);
+
+        function onSearch() {
+            if (viewMode === 'logs') renderLogs();
+            else renderTable();
+        }
+
+        function exportCurrent() {
+            if (viewMode === 'logs') exportLogsCsv();
+            else location.href = '/api/export';
+        }
+
+        function exportLogsCsv() {
+            if (!allLogs.length) { alert("Keine Log-Einträge vorhanden."); return; }
+            const rows = [["Datum", "Typ", "Titel", "Details"]];
+            for (const l of allLogs) {
+                rows.push([
+                    (l.dateStr || "").replace('T', ' '),
+                    l.type || "",
+                    l.title || "",
+                    l.details || (l.id ? "ID: " + l.id : "")
+                ]);
+            }
+            const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')).join('\n');
+            const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'audible_log_dashboard.csv';
+            a.click();
+        }
 
         async function loadData() {
             setStatus("Loading...");
@@ -551,8 +580,11 @@
 
         function renderLogs() {
             const tb = document.getElementById('logsBody');
+            const filter = document.getElementById('searchInput').value.toLowerCase();
             let html = "";
             for(const l of allLogs) {
+                const searchable = ((l.dateStr||"") + " " + (l.type||"") + " " + (l.title||"") + " " + (l.details||"")).toLowerCase();
+                if(filter && !searchable.includes(filter)) continue;
                 let b = l.type;
                 if(l.type=='NEW') b='<span class="badge-new">NEW</span>';
                 if(l.type=='MOD') b='<span class="badge-mod">MOD</span>';
