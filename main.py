@@ -319,7 +319,7 @@ def run_n8n_update_task():
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html")
 
 @app.post("/login")
 async def login_submit(request: Request):
@@ -338,7 +338,7 @@ async def login_submit(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, _auth: bool = Depends(authenticate)):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 @app.get("/api/entries")
 def get_entries(_auth: bool = Depends(authenticate)):
